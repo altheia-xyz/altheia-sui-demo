@@ -1,60 +1,120 @@
 # altheia-sui-demo
 
-Demo agent for the `(sui, move-policy-object)` substrate under altheia's chain-agnostic + substrate-agnostic policy plane.
+Demo agent for the **(sui, move-policy-object)** substrate under altheia's chain-agnostic, substrate-agnostic policy plane.
 
-The agent is a **spread trader on DeepBook v3** — fires when the mid-price spread exceeds a configured bps threshold. Every action passes through altheia's Move policy enforcement before signing.
+Strategy: **spread trader on DeepBook v3**. The off-chain agent observes mid-price spread; the Move side routes every fire through the altheia vault → policy → receipt path before any `Coin` moves. Caps, scope, revocation, pause, and expiry are enforced on-chain at signature time.
 
-**Status:** active build, demo target Sui Overflow 2026 — **2026-06-20**. This repo flips from private to public on submission day.
+**Submission target:** Sui Overflow 2026, Agentic Web sub-track 2 — **2026-06-20**.
 
-## What it does
+## Architecture in five objects
 
-Off-chain agent loop:
-1. Poll DeepBook v3 mid-price for two configured pools
-2. Compute spread (bps)
-3. If spread > threshold → build tx → sign with session key → submit
-
-On-chain:
-- `altheia_sui_demo::spread_trader::execute_spread_trade(...)` is the entry function
-- Routes through `altheia::agent::AgentCap::consume(...)` from [altheia-sui](https://github.com/altheia-xyz/altheia-sui) for per-tx-cap + per-day-cap + program-scope + revocation enforcement
-- Audit event emitted on every allowed or denied action
-
-## Six demo scenarios (target Jun 16)
-
-| # | Scenario | Expected result |
-|---|---|---|
-| 1 | Spread exceeds threshold + trade under per-tx-cap | Allowed, DeepBook order placed, audit event emitted |
-| 2 | Trade amount over per-tx-cap | Denied, abort code from `altheia::policy::ECapExceeded`, denial audit event |
-| 3 | Cumulative day-spend over per-day-cap | Denied, day-cap exceeded |
-| 4 | Pool not in allowed_packages | Denied, package not allowed |
-| 5 | Operator pauses the agent capability | Denied, paused |
-| 6 | Operator revokes the agent capability | Denied, revoked; next attempt also denied |
-
-## Build
-
-```bash
-sui move build
+```
+[ Vault<SUI> ]  ── shared, holds Balance<SUI>; only exit is withdraw_with_receipt
+       │
+       │ withdraw_with_receipt(cap, policy, amount, target_pool, recipient, clock, ctx)
+       ▼
+[ Policy ]      ── shared, enforces caps + scope + revoked + paused + expiry
+       │           updates spent_today across PTBs (closes splitting hole)
+       ▼
+[ AgentCap ]    ── key-only, non-transferable, scopes the agent to (vault_id, policy_id)
+       │
+       │ returns: (Coin<SUI>, WithdrawalReceipt)
+       ▼
+[ WithdrawalReceipt ]  ── HOT POTATO. NO abilities. PTB MUST consume via
+                          receipt::attest_simple() before settle, else abort.
+       │
+       ▼
+[ OwnerCap ]    ── operator's master, mints / revokes AgentCaps, admin-pauses
 ```
 
-(Once altheia_sui local dep is wired post-week-1.)
+The combination — funds in `Balance<T>` inside a no-`store` `Vault`, withdrawal gated by a hot-potato receipt — is what makes the policy **binding** rather than advisory. The agent never holds a `Coin<T>` without simultaneously holding an unconsumed receipt; the PTB cannot settle unless the receipt is closed via the attestation path. This closes the `Coin<T>.store` escape the 4-lens pressure-test surfaced on 2026-05-23.
 
-## Roadmap
+## Six demo scenarios
 
-| Date | Milestone |
-|---|---|
-| Jun 5-6 | `spread_trader.move` body implemented + integrated against altheia-sui modules |
-| Jun 7-8 | Off-chain agent loop (language TBD — likely TypeScript or Rust) signing testnet txs |
-| Jun 9-10 | First end-to-end testnet run, observable allowed-then-denied transition |
-| Jun 11 | 2+ hour unattended autonomous run logged |
-| Jun 12-13 | Six scenarios scripted as one-command reproductions |
-| Jun 14-15 | 90-second demo video |
-| Jun 20 | Submission; repo flips public |
+All seven scenarios run via `sui move test`. Each one asserts a specific enforcement path and either settles or aborts with a known abort code.
 
-See [SHIP_PLAN_2026_05_22.md](https://github.com/altheia-xyz/altheia-plan/blob/main/01_PHASES/sui/SHIP_PLAN_2026_05_22.md) for the full week-by-week.
+| # | Scenario | Expected | Abort code |
+|---|---|---|---|
+| 1 | Spread above threshold, amount under per-tx cap, package allowed | **ALLOWED** — Coin returned, audit event emitted | — |
+| 2 | Trade amount exceeds per-tx cap | DENIED | `altheia::policy::ECapExceededPerTx` (4) |
+| 3 | Cumulative day spend exceeds per-day cap (5 × 100 = cap, 6th aborts) | DENIED | `altheia::policy::ECapExceededPerDay` (5) |
+| 4 | Target pool not in allowed_packages | DENIED | `altheia::policy::EPackageNotAllowed` (6) |
+| 5 | Operator paused the policy | DENIED | `altheia::policy::EPolicyPaused` (3) |
+| 6 | Operator revoked the policy | DENIED | `altheia::policy::EPolicyRevoked` (1) |
+| 7 | Strategy fires below the configured spread threshold | DENIED | `altheia_sui_demo::spread_trader::ESpreadBelowThreshold` (1) |
 
-## Substrate-adapter contract
+```bash
+sui move test
+# Test result: OK. Total tests: 7; passed: 7; failed: 0
+```
 
-This demo exercises the `(sui, move-policy-object)` adapter end-to-end. Full contract spec: [altheia-plan / 02_SRS / substrate-adapter / CONTRACT.md](https://github.com/altheia-xyz/altheia-plan/blob/main/02_SRS/substrate-adapter/CONTRACT.md).
+## Run
 
-## License
+```bash
+# 1. clone + build (altheia-sui must be a sibling directory)
+git clone https://github.com/altheia-xyz/altheia-sui
+git clone https://github.com/altheia-xyz/altheia-sui-demo
+cd altheia-sui-demo
+sui move build && sui move test
 
-Apache 2.0 (LICENSE pending — added before public-flip on Jun 20).
+# 2. publish to testnet (after Jun 20 public flip)
+sui client publish --gas-budget 100_000_000
+
+# 3. operator: provision vault + mint policy + mint agent cap
+sui client call --package <PKG_ID> --module vault --function provision \
+  --type-args 0x2::sui::SUI --gas-budget 10_000_000
+# ...full operator playbook lives in altheia-sui/README.md
+```
+
+## Off-chain agent loop (skeleton)
+
+```ts
+import { Altheia } from "@altheia-xyz/sdk";
+import { Transaction } from "@mysten/sui/transactions";
+import { SuiClient } from "@mysten/sui/client";
+
+const altheia = new Altheia({
+  chain: "sui",
+  agentObjectId: process.env.AGENT_CAP_ID!,
+  apiKey: process.env.ALTHEIA_API_KEY!,
+});
+
+while (true) {
+  const { spreadBps, amount, pool } = await observeDeepBook();
+  if (spreadBps < 5) { await sleep(5000); continue; }
+
+  await altheia.guard(
+    { type: "swap", asset: "SUI", amount, target: pool },
+    async () => {
+      const tx = new Transaction();
+      tx.moveCall({
+        target: `${PKG}::spread_trader::execute_trade`,
+        typeArguments: ["0x2::sui::SUI"],
+        arguments: [
+          vault, cap, policy,
+          tx.pure.u64(spreadBps), tx.pure.u64(amount),
+          tx.pure.address(pool), tx.pure.address(RECIPIENT),
+          tx.object("0x6"),
+        ],
+      });
+      const res = await suiClient.signAndExecuteTransaction({ signer, transaction: tx });
+      return res.digest;
+    },
+  );
+}
+```
+
+## What's in this repo vs. altheia-sui
+
+- **altheia-sui** owns the policy plane: `vault`, `policy`, `agent`, `receipt`, `audit`. The enforcement contract is there.
+- **altheia-sui-demo** (this repo) owns the strategy: `spread_trader` calls into altheia-sui. Demo-specific, swappable per agent.
+
+Same separation as the off-chain side: the SDK (`@altheia-xyz/sdk`) is the universal client; the agent is bespoke.
+
+## Open source on Jun 20
+
+Both repos flip from PRIVATE to PUBLIC on submission day, coordinated with the reveal post. The npm major version of `@altheia-xyz/sdk` (with `(chain, substrate)` dispatch and Sui case) ships the same day.
+
+---
+
+*altheia.xyz — substrate-agnostic policy plane for on-chain AI agents. Solana (Swig) + Sui (Move policy object). One SDK, one backend, one dashboard.*

@@ -5,20 +5,18 @@ version = "0.1.0"
 license = "Apache-2.0"
 authors = ["altheia-xyz <hi@altheia.xyz>"]
 
-# altheia_sui_demo  spread-trader demo agent on Sui testnet, gated by
+# altheia_sui_demo — spread-trader demo agent on Sui testnet, gated by
 # altheia's Move policy module from the altheia-sui repo.
 #
 # Demo agent reads DeepBook v3 mid-price, fires a trade when the spread
-# exceeds a configured threshold, and routes the call through
-# altheia::agent::AgentCap::consume before signing. The Move side here
-# is a thin shell; the agent loop is off-chain (TypeScript or Rust).
+# exceeds a configured threshold, and routes the call through the
+# altheia vault + policy + receipt path before any Coin moves. The Move
+# side here is a thin shell; the agent loop is off-chain (TypeScript).
 #
-# Target: Sui Overflow 2026 Agentic Web sub-track 2  submission 2026-06-20.
+# Target: Sui Overflow 2026 Agentic Web sub-track 2 — submission 2026-06-20.
 
 [dependencies]
-# altheia_sui dependency wires up post-week-1 once we publish addresses;
-# for now the demo module compiles standalone. Uncomment when ready:
-# altheia_sui = { local = "../altheia-sui" }
+altheia_sui = { local = "../altheia-sui" }
 
 [addresses]
 altheia_sui_demo = "0x0"
