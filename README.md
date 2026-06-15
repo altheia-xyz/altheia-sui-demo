@@ -1,8 +1,11 @@
 # altheia-sui-demo
 
-Demo agent for the **(sui, move-policy-object)** substrate under altheia's chain-agnostic, substrate-agnostic policy plane.
+**Two reference agents on one substrate** — proof that [altheia-sui](https://github.com/altheia-xyz/altheia-sui) is a reusable policy primitive, not a one-off app.
 
-Strategy: **spread trader on DeepBook v3**. The off-chain agent observes mid-price spread; the Move side routes every fire through the altheia vault → policy → receipt path before any `Coin` moves. Caps, scope, revocation, pause, and expiry are enforced on-chain at signature time.
+- `spread_trader` — a DeepBook v3 spread trader. Fires when mid-price spread exceeds a threshold.
+- `transfer_bot` — a bare fund-mover. No strategy at all.
+
+They share **zero** strategy code. They share the same enforcement: both `import altheia_sui` and route every withdrawal through the vault → policy → hot-potato-receipt path. Neither writes a line of policy logic. That is the substrate claim — the way a Solana agent inherits Swig, a Sui agent inherits this.
 
 **Submission target:** Sui Overflow 2026, Agentic Web sub-track 2 — **2026-06-20**.
 
@@ -45,8 +48,10 @@ All seven scenarios run via `sui move test`. Each one asserts a specific enforce
 
 ```bash
 sui move test
-# Test result: OK. Total tests: 7; passed: 7; failed: 0
+# Test result: OK. Total tests: 9; passed: 9; failed: 0
 ```
+
+The 7 spread_trader scenarios above + 2 transfer_bot cases (allowed under cap; over-cap denied by the **same** `ECapExceededPerTx` from the same substrate) = 9. The transfer_bot cases exist only to prove the enforcement is the substrate's, not the agent's.
 
 ## Run
 
