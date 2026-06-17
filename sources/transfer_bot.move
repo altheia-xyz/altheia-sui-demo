@@ -1,15 +1,10 @@
 /// altheia_sui_demo::transfer_bot
 ///
-/// A second, deliberately trivial agent on the SAME altheia substrate.
-///
-/// Its only job: move funds to a recipient. It has no strategy, no spread
-/// logic — nothing in common with spread_trader except that it imports the
-/// same altheia-sui policy primitive and is bounded by it.
-///
-/// This is the substrate proof: two unrelated agents, one enforcement
-/// primitive. Any Sui agent adds caps + scope + revocation + audit by
-/// importing `altheia_sui` and routing withdrawals through the vault. No
-/// bespoke enforcement code per agent — the way Solana agents inherit Swig.
+/// A second reference agent that imports altheia_sui and is bounded by the
+/// same policy as spread_trader. Its only job is to move funds to a
+/// recipient; it has no strategy logic and shares no code with
+/// spread_trader except the altheia withdraw-with-receipt path. The policy
+/// enforcement therefore comes from the substrate, not the agent.
 module altheia_sui_demo::transfer_bot;
 
 use sui::coin::Coin;
