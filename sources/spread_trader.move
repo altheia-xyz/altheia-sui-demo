@@ -16,9 +16,11 @@
 module altheia_sui_demo::spread_trader;
 
 use sui::clock::Clock;
-use sui::coin::Coin;
+use sui::coin::{Self, Coin};
+use deepbook::pool::{Self as dbpool, Pool};
+use token::deep::DEEP;
 use altheia::vault::{Self, Vault};
-use altheia::policy::Policy;
+use altheia::policy::{Self, Policy};
 use altheia::agent::AgentCap;
 use altheia::receipt;
 
@@ -31,6 +33,7 @@ const MIN_SPREAD_BPS: u64 = 5;
 // === Errors ===
 
 const ESpreadBelowThreshold: u64 = 1;
+const EValueGuardNotConfigured: u64 = 2;
 
 // === Entry ===
 
@@ -73,6 +76,84 @@ public fun execute_trade<T>(
     // PTB composition) would chain into this Coin.
     receipt::attest_simple(r, recipient);
     coin
+}
+
+/// CLI/operator entry wrapper: execute_trade and deliver the Coin to
+/// `recipient`. `sui client call` can't handle execute_trade's Coin
+/// return; PTB builders compose the returned Coin directly via the
+/// public fun above.
+entry fun execute_trade_entry<T>(
+    vault: &mut Vault<T>,
+    cap: &AgentCap,
+    policy: &mut Policy,
+    spread_bps: u64,
+    amount: u64,
+    target_pool: address,
+    recipient: address,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let coin = execute_trade<T>(
+        vault, cap, policy, spread_bps, amount, target_pool, recipient, clock, ctx,
+    );
+    transfer::public_transfer(coin, recipient);
+}
+
+/// Withdraw `amount` Base from the vault, swap it on `pool` via DeepBook,
+/// and attest the output against DeepBook's mid_price — atomically.
+///
+/// `min_quote_out` is passed to DeepBook as 0; the output floor is enforced
+/// instead by `receipt::attest_value_conservation` using the policy's
+/// `max_slippage_bps` and `base_scalar` (operator-set, read on-chain here).
+/// Scope is the pool's own object id, not a caller argument.
+///
+/// Requires the pool to be whitelisted (DEEP fee paid as `coin::zero<DEEP>`).
+///
+/// Aborts:
+///   ESpreadBelowThreshold     spread_bps < MIN_SPREAD_BPS
+///   EValueGuardNotConfigured  policy.base_scalar == 0
+///   (policy)                  revoked / paused / expired / over-cap / out-of-scope
+///   EUnderMinValue            swap output below the computed floor
+public fun execute_trade_guarded<Base, Quote>(
+    vault: &mut Vault<Base>,
+    cap: &AgentCap,
+    policy: &mut Policy,
+    pool: &mut Pool<Base, Quote>,
+    spread_bps: u64,
+    amount: u64,
+    recipient: address,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    assert!(spread_bps >= MIN_SPREAD_BPS, ESpreadBelowThreshold);
+    let slippage = policy::max_slippage_bps(policy);
+    let scalar = policy::base_scalar(policy);
+    assert!(scalar > 0, EValueGuardNotConfigured);
+
+    // Scope is the actual pool object — agent can't point policy at one
+    // pool and swap on another.
+    let target_pool = object::id(pool).to_address();
+
+    let (coin_in, r) = vault::withdraw_with_receipt(
+        vault, cap, policy, amount, target_pool, recipient, b"SWAP", clock, ctx,
+    );
+
+    // Real DeepBook swap. min_quote_out = 0 on purpose (see doc above);
+    // our policy-bound attest is the real check.
+    let deep_in = coin::zero<DEEP>(ctx);
+    let (base_left, coin_out, deep_left) = dbpool::swap_exact_base_for_quote<Base, Quote>(
+        pool, coin_in, deep_in, 0, clock, ctx,
+    );
+
+    // Closes the hot potato: reverts the whole tx if coin_out is below the
+    // operator's fair-rate floor.
+    receipt::attest_value_conservation<Base, Quote>(
+        r, &coin_out, pool, clock, scalar, slippage, recipient,
+    );
+
+    transfer::public_transfer(coin_out, recipient);
+    transfer::public_transfer(base_left, recipient);
+    transfer::public_transfer(deep_left, recipient);
 }
 
 public fun min_spread_bps(): u64 { MIN_SPREAD_BPS }

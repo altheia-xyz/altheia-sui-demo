@@ -48,3 +48,18 @@ public fun send<T>(
     receipt::attest_simple(r, recipient);
     coin
 }
+
+/// CLI/operator entry wrapper: send + deliver the Coin to `recipient`.
+entry fun send_entry<T>(
+    vault: &mut Vault<T>,
+    cap: &AgentCap,
+    policy: &mut Policy,
+    amount: u64,
+    target_package: address,
+    recipient: address,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let coin = send<T>(vault, cap, policy, amount, target_package, recipient, clock, ctx);
+    transfer::public_transfer(coin, recipient);
+}
