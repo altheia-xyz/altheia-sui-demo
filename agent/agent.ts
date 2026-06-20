@@ -75,30 +75,17 @@ async function readMidPrice(c: SuiClient, cfg: Config, sender: string): Promise<
 /** PTB: withdraw SUI under policy -> DeepBook quote->base swap -> adapter attest -> sweep. */
 async function fireSwap(c: SuiClient, cfg: Config, kp: Ed25519Keypair): Promise<string> {
   const tx = new Transaction();
-  const [coinIn, receipt] = tx.moveCall({
-    target: `${cfg.corePkg}::vault::withdraw_with_receipt`,
-    typeArguments: [cfg.quoteType],
+  // One gated adapter call: reads mid_price BEFORE the swap, withdraws under
+  // policy, swaps on DeepBook, attests value-conservation, sweeps to recipient.
+  tx.moveCall({
+    target: `${cfg.adapterPkg}::deepbook_adapter::execute_swap_quote_for_base`,
+    typeArguments: [cfg.baseType, cfg.quoteType],
     arguments: [
       tx.object(cfg.vault), tx.object(cfg.cap), tx.object(cfg.policy),
-      tx.pure.u64(cfg.amount), tx.pure.address(cfg.pool), tx.pure.address(cfg.recipient),
-      tx.pure.vector("u8", tag("SWAP")), tx.object(CLOCK),
+      tx.object(cfg.pool), tx.object(cfg.registry),
+      tx.pure.u64(cfg.amount), tx.pure.address(cfg.recipient), tx.object(CLOCK),
     ],
   });
-  const deepZero = tx.moveCall({ target: `0x2::coin::zero`, typeArguments: [cfg.deepType] });
-  const [baseOut, quoteLeft, deepLeft] = tx.moveCall({
-    target: `${cfg.dbPkg}::pool::swap_exact_quote_for_base`,
-    typeArguments: [cfg.baseType, cfg.quoteType],
-    arguments: [tx.object(cfg.pool), coinIn, deepZero, tx.pure.u64(0), tx.object(CLOCK)],
-  });
-  tx.moveCall({
-    target: `${cfg.adapterPkg}::deepbook_adapter::attest_value_conservation_quote_for_base`,
-    typeArguments: [cfg.baseType, cfg.quoteType],
-    arguments: [
-      receipt, tx.object(cfg.registry), tx.object(cfg.policy),
-      baseOut, quoteLeft, tx.object(cfg.pool), tx.object(CLOCK), tx.pure.address(cfg.recipient),
-    ],
-  });
-  tx.transferObjects([baseOut, quoteLeft, deepLeft], tx.pure.address(cfg.recipient));
   const res = await c.signAndExecuteTransaction({ signer: kp, transaction: tx, options: { showEffects: true } });
   if (res.effects?.status.status !== "success") throw new Error(res.effects?.status.error ?? "tx failed");
   return res.digest;
@@ -178,6 +165,7 @@ async function main() {
   const c = new SuiClient({ url: cfg.rpc ?? getFullnodeUrl("testnet") });
   const me = kp.getPublicKey().toSuiAddress();
   const mode = process.argv[2] ?? "swap";
+  if (mode === "swap-once") { log(`one-shot swap (amount ${cfg.amount})...`); log(`  ✓ settled ${await fireSwap(c, cfg, kp)}`); return; }
   if (mode === "limit") { log(`placing limit order...`); log(`  ✓ ${await placeLimit(c, cfg, kp)}`); return; }
   if (mode === "cancel") { log(`cancelling all orders...`); log(`  ✓ ${await cancelAll(c, cfg, kp)}`); return; }
   await swapLoop(c, cfg, kp, me);
