@@ -2,7 +2,6 @@
   "rpc": "https://fullnode.testnet.sui.io:443",
   "demoPkg": "0x<altheia-sui-demo package id>",
   "registry": "0x<shared AdapterRegistry id>",
-  "adapterPkg": "0x<package id approved in the registry (the demo pkg)>",
   "vault": "0x<shared Vault<SUI> id>",
   "policy": "0x<shared Policy id>",
   "cap": "0x<AgentCap id owned by the agent address>",

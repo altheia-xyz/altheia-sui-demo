@@ -22,7 +22,6 @@ type Config = {
   rpc?: string;
   demoPkg: string;       // altheia-sui-demo package id
   registry: string;      // shared AdapterRegistry id
-  adapterPkg: string;    // package id approved in the registry (the demo pkg)
   vault: string;         // shared Vault<Base> id
   policy: string;        // shared Policy id
   cap: string;           // AgentCap object id (owned by the agent address)
@@ -82,7 +81,6 @@ async function fireTrade(c: SuiClient, cfg: Config, kp: Ed25519Keypair): Promise
       tx.object(cfg.policy),
       tx.object(cfg.pool),
       tx.object(cfg.registry),
-      tx.pure.address(cfg.adapterPkg),
       tx.pure.u64(cfg.spreadBps),
       tx.pure.u64(cfg.amount),
       tx.pure.address(cfg.recipient),
