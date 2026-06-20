@@ -18,7 +18,7 @@ authors = ["altheia-xyz <hi@altheia.xyz>"]
 [dependencies]
 altheia_sui = { local = "../altheia-sui" }
 # Real DeepBook v3 — the guarded path swaps on it + reads its price.
-deepbook = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/deepbook", rev = "main" }
+deepbook = { git = "https://github.com/MystenLabs/deepbookv3.git", subdir = "packages/deepbook", rev = "testnet-v17.0.0" }
 
 [addresses]
 altheia_sui_demo = "0x0"

@@ -23,6 +23,8 @@ use altheia::vault::{Self, Vault};
 use altheia::policy::{Self, Policy};
 use altheia::agent::AgentCap;
 use altheia::receipt;
+use altheia::registry::{Self, AdapterRegistry};
+use altheia_sui_demo::deepbook_adapter;
 
 // === Constants ===
 
@@ -34,6 +36,7 @@ const MIN_SPREAD_BPS: u64 = 5;
 
 const ESpreadBelowThreshold: u64 = 1;
 const EValueGuardNotConfigured: u64 = 2;
+const EAdapterNotApproved: u64 = 3;
 
 // === Entry ===
 
@@ -119,6 +122,8 @@ public fun execute_trade_guarded<Base, Quote>(
     cap: &AgentCap,
     policy: &mut Policy,
     pool: &mut Pool<Base, Quote>,
+    registry: &AdapterRegistry,
+    adapter_pkg: address,
     spread_bps: u64,
     amount: u64,
     recipient: address,
@@ -126,6 +131,9 @@ public fun execute_trade_guarded<Base, Quote>(
     ctx: &mut TxContext,
 ) {
     assert!(spread_bps >= MIN_SPREAD_BPS, ESpreadBelowThreshold);
+    // Global governance gate: the venue adapter must be approved. Admin can
+    // remove it from the registry to kill all agents' access at once.
+    assert!(registry::is_approved(registry, adapter_pkg), EAdapterNotApproved);
     let slippage = policy::max_slippage_bps(policy);
     let scalar = policy::base_scalar(policy);
     assert!(scalar > 0, EValueGuardNotConfigured);
@@ -139,16 +147,16 @@ public fun execute_trade_guarded<Base, Quote>(
     );
 
     // Real DeepBook swap. min_quote_out = 0 on purpose (see doc above);
-    // our policy-bound attest is the real check.
+    // the adapter's policy-bound attest is the real check.
     let deep_in = coin::zero<DEEP>(ctx);
     let (base_left, coin_out, deep_left) = dbpool::swap_exact_base_for_quote<Base, Quote>(
         pool, coin_in, deep_in, 0, clock, ctx,
     );
 
-    // Closes the hot potato: reverts the whole tx if coin_out is below the
-    // operator's fair-rate floor.
-    receipt::attest_value_conservation<Base, Quote>(
-        r, &coin_out, pool, clock, scalar, slippage, recipient,
+    // Adapter closes the hot potato; reverts the whole tx if coin_out is
+    // below the operator's fair-rate floor.
+    deepbook_adapter::attest_value_conservation<Base, Quote>(
+        r, &coin_out, pool, clock, slippage, scalar, recipient,
     );
 
     transfer::public_transfer(coin_out, recipient);
