@@ -1,0 +1,17 @@
+{
+  "rpc": "https://fullnode.testnet.sui.io:443",
+  "demoPkg": "0x<altheia-sui-demo package id>",
+  "registry": "0x<shared AdapterRegistry id>",
+  "adapterPkg": "0x<package id approved in the registry (the demo pkg)>",
+  "vault": "0x<shared Vault<SUI> id>",
+  "policy": "0x<shared Policy id>",
+  "cap": "0x<AgentCap id owned by the agent address>",
+  "pool": "0x1c19362ca52b8ffd7a33cee805a67d40f31e6ba303753fd3a4cfdfacea7163a5",
+  "baseType": "0x2::sui::SUI",
+  "quoteType": "0xf7152c05930480cd740d7311b5b8b45c6f488e3a53a11c3f74a6fac36a52e0d7::DBUSDC::DBUSDC",
+  "dbPkg": "0x22be4cade64bf2d02412c7e8d0e8beea2f78828b948118d46735315409371a3c",
+  "recipient": "0x<where swap output + leftovers go>",
+  "amount": 50000000,
+  "spreadBps": 20,
+  "intervalMs": 8000
+}

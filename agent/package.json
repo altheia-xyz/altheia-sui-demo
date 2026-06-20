@@ -1,0 +1,18 @@
+{
+  "name": "altheia-sui-demo-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Autonomous agent: observes DeepBook, decides, signs with the AgentCap, executes guarded trades, halts on revocation.",
+  "scripts": {
+    "agent": "tsx agent.ts"
+  },
+  "dependencies": {
+    "@mysten/sui": "^1.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
