@@ -9,7 +9,7 @@
     "demo": "tsx --env-file=.env demo.ts"
   },
   "dependencies": {
-    "@altheia-xyz/sui": "link:../../altheia-sdk/packages/sui"
+    "@altheia-xyz/sui": "^0.0.1"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
