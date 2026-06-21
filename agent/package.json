@@ -5,10 +5,11 @@
   "type": "module",
   "description": "Autonomous agent: observes DeepBook, decides, signs with the AgentCap, executes guarded trades, halts on revocation.",
   "scripts": {
-    "agent": "tsx agent.ts"
+    "agent": "tsx agent.ts",
+    "demo": "tsx --env-file=.env demo.ts"
   },
   "dependencies": {
-    "@mysten/sui": "^1.18.0"
+    "@altheia-xyz/sui": "link:../../altheia-sdk/packages/sui"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
