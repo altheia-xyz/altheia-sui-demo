@@ -6,10 +6,10 @@
   "description": "Autonomous agent: observes DeepBook, decides, signs with the AgentCap, executes guarded trades, halts on revocation.",
   "scripts": {
     "agent": "tsx agent.ts",
-    "demo": "tsx --env-file=.env demo.ts"
+    "demo": "tsx --env-file-if-exists=../.env demo.ts"
   },
   "dependencies": {
-    "@altheia-xyz/sui": "^0.0.2"
+    "@altheia-xyz/sui": "^0.0.3"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
